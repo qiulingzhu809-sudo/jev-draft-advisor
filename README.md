@@ -94,6 +94,8 @@
 
 ## 发布与贡献时保护密钥
 
+当前 GitHub Actions 未启用；上游 CI 配置保留在 `.github/ci-example.yml` 作为参考。维护者可在具备 workflow 发布权限后，将它移到 `.github/workflows/ci.yml` 启用。
+
 `.gitignore` 排除了 `.env`、`.env.*`（保留 `.env.example`）、构建目录、依赖及测试缓存。但忽略规则不会清除已提交历史，也不会过滤手工创建的 ZIP 文件。
 
 - 只提交不含真实密钥的 `.env.example`，不提交个人 `.env`。
