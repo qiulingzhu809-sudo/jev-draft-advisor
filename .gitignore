@@ -1,7 +1,11 @@
 node_modules/
 dist/
+.build/
 *.tsbuildinfo
 .env
+.env.*
+!.env.example
+.test-tmp/
 .DS_Store
 test-results/
 .playwright/

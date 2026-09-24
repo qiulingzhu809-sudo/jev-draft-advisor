@@ -41,6 +41,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/unit.test.mjs",
     "test:e2e": "node --test test/e2e.test.mjs",
+    "smart-compose": "node --env-file=.env scripts/smart-compose.mjs",
+    "draft-advisor": "bash scripts/run-draft-advisor.sh",
     "postinstall": "node scripts/ensure-chromium.mjs"
   },
   "keywords": [

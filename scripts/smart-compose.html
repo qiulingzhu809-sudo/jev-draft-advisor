@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jev × Codex 智能发送</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #20292a; background: #f5f6f3; }
+    body { max-width: 880px; margin: 32px auto; padding: 0 20px; }
+    h1 { font-size: 28px; margin-bottom: 8px; }
+    p { line-height: 1.6; color: #586264; }
+    section { background: white; border: 1px solid #dbe1dd; border-radius: 14px; padding: 22px; margin: 18px 0; box-shadow: 0 4px 18px #1424180a; }
+    label { display: block; font-weight: 650; margin: 12px 0 6px; }
+    textarea, input, select { box-sizing: border-box; width: 100%; padding: 11px 12px; border: 1px solid #bfcac4; border-radius: 8px; font: inherit; background: white; }
+    textarea { min-height: 150px; resize: vertical; }
+    button { padding: 10px 17px; border: 0; border-radius: 8px; background: #1f6b4d; color: white; font: inherit; cursor: pointer; }
+    button:disabled { background: #9caaa2; cursor: wait; }
+    button.secondary { background: #e9eee9; color: #25362c; }
+    .row { display: flex; gap: 12px; align-items: end; }
+    .row > * { flex: 1; }
+    .actions { margin-top: 18px; display: flex; gap: 10px; }
+    .note { font-size: 13px; }
+    #status { min-height: 24px; color: #8b3d20; }
+    #approvals article { border: 1px solid #dca457; background: #fff9ec; padding: 12px; margin: 8px 0; border-radius: 8px; }
+    #approvals button { margin: 8px 8px 0 0; }
+    #thread-id { font-family: monospace; overflow-wrap: anywhere; }
+    [hidden] { display: none !important; }
+  </style>
+  <script src="/smart-compose.js" type="module"></script>
+</head>
+<body>
+  <h1>Jev × Codex 智能发送</h1>
+  <p>这里只负责 Jev 选型和发起 Codex 任务。发送后的多轮对话请在 Codex 原生任务中完成；本页不是聊天界面，也不会读取或改动 Codex 桌面原输入框。</p>
+  <section id="newPromptSection">
+    <label for="prompt">任务内容</label>
+    <textarea id="prompt" placeholder="描述你要 Codex 完成的任务"></textarea>
+    <div class="row">
+      <div><label for="priority">优化目标</label><select id="priority"><option value="balanced">均衡</option><option value="cost">成本</option><option value="speed">速度</option><option value="quality">质量优先</option></select></div>
+      <div><label for="cwd">工作目录（绝对路径）</label><input id="cwd" spellcheck="false"></div>
+    </div>
+    <div class="actions"><button id="smartSend">智能发送（自动选型）</button><button id="analyze" class="secondary">先分析，再手动确认</button></div>
+    <p class="note">任务文本会发送给 TypeSafe/Jev 分类；不要输入密码、密钥或未脱敏的敏感资料。默认不会保存任务草稿。</p>
+  </section>
+  <section id="result" hidden>
+    <h2>发送前确认</h2>
+    <p id="reason"></p>
+    <div class="row">
+      <div><label for="model">模型</label><select id="model"></select></div>
+      <div><label for="effort">推理强度</label><select id="effort"></select></div>
+    </div>
+    <p class="note" id="cost"></p>
+    <div class="actions"><button id="send">确认并发送给 Codex</button></div>
+  </section>
+  <section id="handoff" hidden>
+    <h2>已发往 Codex</h2>
+    <p>任务标题：<span id="thread-title"></span></p>
+    <p>任务 ID：<span id="thread-id"></span></p>
+    <p>请在 Codex 桌面版的任务列表中打开这条任务，后续直接在 Codex 对话框回复。本地网页目前不能可靠地自动切换到桌面任务。</p>
+    <p class="note" id="handoff-state">首轮正在运行。若下方出现审批请求，请先在此处理；不要关闭此页面或本地服务。</p>
+    <div class="actions"><button id="copyId" class="secondary">复制任务 ID</button><button id="newTask" class="secondary" disabled>发起另一条任务</button></div>
+  </section>
+  <p id="status" role="status"></p>
+  <section id="running" hidden><h2>首轮审批</h2><div id="approvals"></div><p class="note">回复内容请在 Codex 任务中查看；此处仅处理启动客户端收到的审批。</p></section>
+</body>
+</html>
