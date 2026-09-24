@@ -11,6 +11,20 @@
 - 隐藏后程序继续驻留，下次触发分析可再次显示；退出后需重新启动程序。
 - 优先通过 macOS 辅助功能读取文本，失败时尝试键盘复制回退。
 
+## 使用截图
+
+点击 Codex 草稿输入框后按 `Control+J`，浮窗显示分析状态：
+
+![Jev 正在分析当前草稿](assets/draft-advisor/analyzing.png)
+
+分析完成后，显示推荐模型和推理强度，用户在 Codex 中手动切换。截图中的模型仅为一次推荐示例；“草稿未发送”指未提交为 Codex 消息，分析文本仍会发送到 TypeSafe/Jev，详见下方隐私说明。
+
+![Jev 显示推荐模型及推理强度](assets/draft-advisor/recommendation.png)
+
+右键浮窗可以固定当前位置、隐藏弹窗或退出 Jev；固定后菜单可用于取消固定。
+
+![浮窗右键菜单：固定当前位置、隐藏弹窗、退出 Jev](assets/draft-advisor/context-menu.png)
+
 ## 安装与 API Key 配置
 
 需要 macOS、Codex 桌面应用、Node.js 20.6 或更新版本（推荐当前 LTS），以及包含 `swiftc` 的 Xcode Command Line Tools。Windows/Linux 暂不支持此菜单栏助手。
