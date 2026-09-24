@@ -29,8 +29,13 @@ export function recommend(answers, priority = "balanced") {
   if (sensitive >= 0.7) minimumTier = 4;
   const selectedTier = priority === "quality" ? Math.min(4, minimumTier + 1) : minimumTier;
   const selected = MODELS[selectedTier - 1];
-  const effort = depth === "deep" ? (selectedTier >= 3 ? "xhigh" : "high")
+  let effort = depth === "deep" ? (selectedTier >= 3 ? "xhigh" : "high")
     : depth === "light" ? "low" : selectedTier >= 3 ? "high" : "medium";
+  if (sensitive < 0.7) {
+    if (priority === 'cost' && depth !== 'deep') effort = 'low';
+    if (priority === 'speed') effort = depth === 'deep' ? 'high' : 'low';
+    if (priority === 'quality' && depth !== 'light') effort = depth === 'deep' ? 'xhigh' : 'high';
+  }
 
   return {
     model: selected.model,

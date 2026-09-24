@@ -24,6 +24,47 @@ final class DraftAdvisor: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotkey: EventHotKeyRef?
     private var busy = false
     private var isPositionPinned = false
+    private let preferences = UserDefaults(suiteName: "jev-draft-advisor")!
+    private let priorities = [("balanced", "均衡"), ("cost", "性价比"), ("quality", "质量优先"), ("speed", "速度优先")]
+    private var priority: String { preferences.string(forKey: "priority") ?? "balanced" }
+    private var considerQuota: Bool { preferences.object(forKey: "considerQuota") as? Bool ?? true }
+    private var preferenceItems: [NSMenuItem] = []
+    private var quotaItems: [NSMenuItem] = []
+
+    private func addPreferences(to menu: NSMenu) {
+        let parent = NSMenuItem(title: "推荐偏好", action: nil, keyEquivalent: "")
+        let choices = NSMenu()
+        for (key, title) in priorities {
+            let item = NSMenuItem(title: title, action: #selector(selectPriority(_:)), keyEquivalent: "")
+            item.representedObject = key
+            item.target = self
+            choices.addItem(item)
+            preferenceItems.append(item)
+        }
+        parent.submenu = choices
+        menu.addItem(parent)
+        let quota = NSMenuItem(title: "参考本地 Codex 登录账户额度", action: #selector(toggleQuota), keyEquivalent: "")
+        quota.target = self
+        quotaItems.append(quota)
+        menu.addItem(quota)
+        refreshPreferences()
+    }
+
+    private func refreshPreferences() {
+        for item in preferenceItems { item.state = (item.representedObject as? String) == priority ? .on : .off }
+        for item in quotaItems { item.state = considerQuota ? .on : .off }
+    }
+
+    @objc private func selectPriority(_ sender: NSMenuItem) {
+        guard let key = sender.representedObject as? String else { return }
+        preferences.set(key, forKey: "priority")
+        refreshPreferences()
+    }
+
+    @objc private func toggleQuota() {
+        preferences.set(!considerQuota, forKey: "considerQuota")
+        refreshPreferences()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -34,6 +75,7 @@ final class DraftAdvisor: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "隐藏弹窗", action: #selector(hidePanel), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: ""))
         menu.items.forEach { $0.target = self }
+        addPreferences(to: menu)
         statusItem.menu = menu
 
         let id = EventHotKeyID(signature: hotkeySignature, id: 1)
@@ -73,6 +115,8 @@ final class DraftAdvisor: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func makePanelMenu() -> NSMenu {
         let menu = NSMenu()
         menu.delegate = self
+        addPreferences(to: menu)
+        menu.addItem(.separator())
         let pin = NSMenuItem(title: "固定当前位置", action: #selector(togglePositionPinned), keyEquivalent: "")
         pin.target = self
         pinMenuItem = pin
@@ -125,9 +169,11 @@ final class DraftAdvisor: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if draft.count > 8_000 { show("草稿超过 8000 字，请缩短后再分析"); return }
         busy = true
+        let selectedPriority = priority
+        let includeQuota = considerQuota
         show("Jev 正在分析当前草稿…")
         DispatchQueue.global(qos: .userInitiated).async {
-            let message = self.runJev(draft)
+            let message = self.runJev(draft, priority: selectedPriority, considerQuota: includeQuota)
             DispatchQueue.main.async {
                 self.busy = false
                 self.show(message)
@@ -135,7 +181,7 @@ final class DraftAdvisor: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func runJev(_ draft: String) -> String {
+    private func runJev(_ draft: String, priority: String, considerQuota: Bool) -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: ProcessInfo.processInfo.environment["JEV_NODE_BIN"] ?? "/opt/homebrew/bin/node")
         process.arguments = ["--env-file=.env", "scripts/advise-draft.mjs"]
@@ -146,30 +192,51 @@ final class DraftAdvisor: NSObject, NSApplicationDelegate, NSMenuDelegate {
         process.standardError = error
         do {
             try process.run()
-            let data = try JSONSerialization.data(withJSONObject: ["prompt": draft])
+            let data = try JSONSerialization.data(withJSONObject: ["prompt": draft, "priority": priority, "considerQuota": considerQuota])
             input.fileHandleForWriting.write(data)
             try? input.fileHandleForWriting.close()
+            var pending = Data()
+            var lastMessage: String?
+            while true {
+                let chunk = output.fileHandleForReading.availableData
+                if chunk.isEmpty { break }
+                pending.append(chunk)
+                while let newline = pending.firstIndex(of: 10) {
+                    let line = Data(pending[..<newline])
+                    pending.removeSubrange(...newline)
+                    if let message = self.renderResponse(line, priority: priority) {
+                        lastMessage = message
+                        DispatchQueue.main.async { self.show(message) }
+                    }
+                }
+            }
             process.waitUntilExit()
             guard process.terminationStatus == 0 else {
                 let detail = String(data: error.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "未知错误"
                 return "分析失败：\(detail.prefix(100))"
             }
-            let response = output.fileHandleForReading.readDataToEndOfFile()
-            guard let json = try JSONSerialization.jsonObject(with: response) as? [String: Any],
-                  let model = json["model"] as? String, let effort = json["effort"] as? String else {
-                return "Jev 返回的数据不完整"
-            }
-            let depth = json["reasoningDepth"] as? String ?? "normal"
-            let review = (json["needsHumanReview"] as? Bool == true) ? " · 请人工复核" : ""
-            return "推荐 \(model) · \(effort)（\(depth)）\(review)\n请在 Codex 中手动切换；草稿未发送。"
+            return lastMessage ?? "Jev 返回的数据不完整"
         } catch {
             return "分析失败：\(error.localizedDescription)"
         }
     }
 
+    private func renderResponse(_ response: Data, priority: String) -> String? {
+            guard let json = (try? JSONSerialization.jsonObject(with: response)) as? [String: Any],
+                  let model = json["model"] as? String, let effort = json["effort"] as? String else {
+                return nil
+            }
+            let depth = json["reasoningDepth"] as? String ?? "normal"
+            let review = (json["needsHumanReview"] as? Bool == true) ? " · 请人工复核" : ""
+            let title = priorities.first(where: { $0.0 == priority })?.1 ?? priority
+            let quota = json["quotaText"] as? String ?? "额度未知"
+            let adjustment = (json["budgetAdjusted"] as? Bool == true) ? " · 已节省推理消耗" : ""
+            return "\(title)：\(model) · \(effort)（\(depth)）\(review)\n\(quota)\(adjustment)\n请手动切换；草稿未提交到 Codex。"
+    }
+
     private func show(_ message: String) {
         if panel == nil {
-            let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 90),
+            let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 110),
                                  styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             window.level = .floating
             window.isOpaque = false
@@ -181,32 +248,57 @@ final class DraftAdvisor: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             let root = NSView(frame: window.contentView!.bounds)
             root.wantsLayer = true
-            root.layer?.cornerRadius = 12
+            root.layer?.cornerRadius = 36
+            root.layer?.borderWidth = 1
+            root.layer?.borderColor = NSColor.white.withAlphaComponent(0.7).cgColor
             root.layer?.masksToBounds = true
             let panelMenu = makePanelMenu()
             root.menu = panelMenu
 
+            if #available(macOS 26.0, *) {
+                // Native glass supplies its own blur, tint, and edge highlights.
+                root.layer?.borderWidth = 0
+            } else {
             let box = NSVisualEffectView(frame: root.bounds)
             box.material = .popover
             box.state = .active
-            box.alphaValue = 0.62
+            box.blendingMode = .behindWindow
+            box.alphaValue = 1
             box.autoresizingMask = [.width, .height]
             box.menu = panelMenu
             root.addSubview(box)
 
+            // Keep blur fully composited; reducing its alpha exposes sharp text behind it.
+            let tint = NSView(frame: root.bounds)
+            tint.wantsLayer = true
+            tint.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.12).cgColor
+            tint.autoresizingMask = [.width, .height]
+            tint.menu = panelMenu
+            root.addSubview(tint)
+            }
+
             let text = MovableLabel(frame: .zero)
-            text.frame = NSRect(x: 16, y: 10, width: 388, height: 70)
+            text.frame = NSRect(x: 22, y: 16, width: 476, height: 78)
             text.isBezeled = false
             text.drawsBackground = false
             text.isEditable = false
             text.isSelectable = false
-            text.maximumNumberOfLines = 3
+            text.maximumNumberOfLines = 5
             text.lineBreakMode = .byWordWrapping
             text.font = .systemFont(ofSize: 13)
-            text.textColor = .labelColor.withAlphaComponent(0.88)
+            text.textColor = .labelColor
             text.menu = panelMenu
             root.addSubview(text)
-            window.contentView = root
+            if #available(macOS 26.0, *) {
+                let glass = NSGlassEffectView(frame: root.bounds)
+                glass.style = .clear
+                glass.cornerRadius = 36
+                glass.contentView = root
+                glass.menu = panelMenu
+                window.contentView = glass
+            } else {
+                window.contentView = root
+            }
             panel = window
             label = text
         }
@@ -215,8 +307,8 @@ final class DraftAdvisor: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let mouse = NSEvent.mouseLocation
             let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main
             let bounds = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1000, height: 700)
-            let x = min(max(mouse.x - 210, bounds.minX + 8), bounds.maxX - 428)
-            let y = min(max(mouse.y + 22, bounds.minY + 8), bounds.maxY - 98)
+            let x = min(max(mouse.x - 260, bounds.minX + 8), bounds.maxX - 528)
+            let y = min(max(mouse.y + 22, bounds.minY + 8), bounds.maxY - 118)
             panel?.setFrameOrigin(NSPoint(x: x, y: y))
         }
         panel?.orderFrontRegardless()
