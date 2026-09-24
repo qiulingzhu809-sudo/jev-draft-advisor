@@ -29,15 +29,15 @@
 
 点击 Codex 草稿输入框后按 `Control+J`，浮窗显示分析状态：
 
-![Jev 正在分析当前草稿](assets/draft-advisor/analyzing.png)
+![新版玻璃浮窗：Jev 正在分析当前草稿](assets/draft-advisor/glass-analyzing.png)
 
 分析完成后，显示推荐模型和推理强度；额度返回后补充剩余比例、自然重置时间及可用重置机会，用户在 Codex 中手动切换。截图中的模型、额度与日期仅为拍摄时的示例，不代表其他账户的状态。“草稿未提交到 Codex”不代表文本没有离开电脑：分析文本仍会发送到 TypeSafe/Jev，详见下方隐私说明。
 
-![Jev 显示推荐模型及推理强度](assets/draft-advisor/recommendation.png)
+![新版玻璃浮窗：性价比推荐、账户额度和重置机会](assets/draft-advisor/glass-quota-result.png)
 
 右键浮窗可切换均衡、性价比、质量优先、速度优先，也可开关额度参考、固定当前位置、隐藏弹窗或退出 Jev；固定后菜单可用于取消固定。
 
-![浮窗右键菜单：推荐偏好、额度参考、固定位置、隐藏和退出](assets/draft-advisor/context-menu.png)
+![新版玻璃浮窗右键菜单：四种推荐偏好、额度参考、固定位置、隐藏和退出](assets/draft-advisor/glass-preferences-menu.png)
 
 ## 安装与 API Key 配置
 
